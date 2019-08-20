@@ -4,7 +4,7 @@
 # In[1]:
 
 
-get_ipython().run_line_magic('pylab', 'inline')
+#get_ipython().run_line_magic('pylab', 'inline')
 
 
 # In[2]:
@@ -29,7 +29,7 @@ DATUMS_PATH
 # In[4]:
 
 
-get_ipython().run_line_magic('pwd', '')
+##get_ipython().run_line_magic('pwd', '')
 
 
 # In[5]:
