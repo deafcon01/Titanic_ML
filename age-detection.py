@@ -57,7 +57,7 @@ print('Age :',train.Class[i])
 # In[8]:
 
 
-imshow(image)
+#imshow(image)
 
 
 # In[9]:
