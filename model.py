@@ -14,7 +14,6 @@ tf.logging.info('TF Version {}'.format(tf.__version__))
 tf.logging.info('GPU Available {}'.format(tf.test.is_gpu_available()))
 if 'TF_CONFIG' in os.environ:
     tf.logging.info('TF_CONFIG: {}'.format(os.environ["TF_CONFIG"]))
-
 FLAGS = None
 DATUMS_PATH = os.getenv('DATUMS_PATH', None)
 DATASET_NAME = os.getenv('DATASET_NAME', None)
@@ -25,10 +24,9 @@ EPOCHS = int(os.getenv('TF_EPOCHS', 1))
 TF_TRAIN_STEPS = int(os.getenv('TF_TRAIN_STEPS',1000))
 summary_interval = 100
 image_size = 299
+num_classes=8
 print ("TF_CONFIG: {}".format(os.getenv("TF_CONFIG", '{}')))
-
 steps_epoch  = 0
-
 def count_epochs(iterator):
     cluster_spec = json.loads(os.getenv('TF_CONFIG',None))
     role = cluster_spec['task']
@@ -55,21 +53,21 @@ def _img_string_to_tensor(image_string, image_size=(image_size,image_size)):
     image_decoded_as_float = tf.image.convert_image_dtype(image_decoded, dtype=tf.float32)
     # Resize to expected
     image_resized = tf.image.resize_images(image_decoded_as_float, size=image_size)
-    
+
     return image_resized
 
 def make_input_fn(file_pattern, image_size=(image_size,image_size), shuffle=False, batch_size=BATCH_SIZE, num_epochs=EPOCHS, buffer_size=4096):
-    
+
     def _path_to_img(path):
         # Get the parent folder of this file to get it's class name
         label = tf.string_split([path], delimiter='/').values[-2]
-        
+
         # Read in the image from disk
         image_string = tf.read_file(path)
         image_resized = _img_string_to_tensor(image_string, image_size)
-        
+
         return { 'inputs': image_resized }, label
-    
+
     def _input_fn():
         dataset = tf.data.Dataset.list_files(file_pattern)
         if shuffle:
@@ -84,7 +82,6 @@ def make_input_fn(file_pattern, image_size=(image_size,image_size), shuffle=Fals
         return (images, labels)
 
     return _input_fn
-
 def model_fn(features, labels, mode, params):
     is_training = mode == tf.estimator.ModeKeys.TRAIN
 
@@ -94,7 +91,7 @@ def model_fn(features, labels, mode, params):
     bottleneck_tensor = module(features['inputs'])
 
     with tf.name_scope('final_retrain_ops'):
-        logits = tf.layers.dense(bottleneck_tensor, units=1, trainable=is_training)
+        logits = tf.layers.dense(bottleneck_tensor,units=num_classes, trainable=is_training)
 
     def train_op_fn(loss):
         optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate)
@@ -111,16 +108,15 @@ def model_fn(features, labels, mode, params):
     if mode == tf.estimator.ModeKeys.TRAIN:
         tf.summary.scalar('accuracy', metrics_lib.accuracy(labels, spec.predictions['classes'])[1])
         logging_hook = logger_hook({"loss": spec.loss,"accuracy":
-            metrics_lib.accuracy(labels, spec.predictions['classes'])[1], 
+            metrics_lib.accuracy(labels, spec.predictions['classes'])[1],
             "step" : tf.train.get_or_create_global_step(), "steps_epoch": steps_epoch, "mode":"train"}, every_n_iter=summary_interval)
         spec = spec._replace(training_hooks = [logging_hook])
     if mode == tf.estimator.ModeKeys.EVAL:
         logging_hook = logger_hook({"loss": spec.loss, "accuracy":
-            spec.eval_metric_ops['accuracy'][1], "step" : 
+            spec.eval_metric_ops['accuracy'][1], "step" :
             tf.train.get_or_create_global_step(), "steps_epoch": steps_epoch, "mode": "eval"}, every_n_iter=summary_interval)
         spec = spec._replace(evaluation_hooks = [logging_hook])
     return spec
-
 def train(_):
     try:
       fp = open(os.getenv('HP_TUNING_INFO_FILE', 'None'),'r')
@@ -144,10 +140,10 @@ def train(_):
         archive = zipfile.ZipFile(ZIP_FILE)
         for file in archive.namelist():
             if file.startswith('data'):
-                archive.extract(file, EXTRACT_PATH)
+                #archive.extract(file, )
+                pass
         print("Training data successfuly extracted")
-        DATA_DIR = EXTRACT_PATH + "/data"    
-
+        DATA_DIR = "{}/{}".format(DATUMS_PATH, DATASET_NAME) + "/data"
     params = {
         'module_spec': 'https://tfhub.dev/google/imagenet/resnet_v2_50/feature_vector/1',
         'module_name': 'resnet_v2_50',
@@ -200,8 +196,6 @@ def train(_):
             classifier.export_savedmodel(MODEL_DIR, serving_input_receiver_fn)
     else:
         classifier.export_savedmodel(MODEL_DIR, serving_input_receiver_fn)
-
-
 def run():
     global summary_interval
     summary_interval = 100
